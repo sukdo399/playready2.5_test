@@ -1,0 +1,216 @@
+playready 2.5 spec review (focus on client development, key processing and scenarios)
+
+*. skip playready PC/server SDK, domains, ILA, programming guide, rental/subscrition, metering ....etc.
+
+
+1. playready clients
+    - DLA: direct license acquisition
+    - ILA: indirect license acquisition
+    - license: the key to decrypt content, rules for how that content may be used.
+    - The content protection information within the license is encrypted using a client's public key or a client's domain's public key encryption information. 
+    - The license is considered "bound" to the client or domain that has the private key for decrypting the content protection information.
+
+2. playready servers
+    - playready server SDK
+    - DRM servers
+        : license server, content packaging server, domain controller, metering/MAS (metering aggregation server) server
+    - web servers
+        : contents store, distribute
+    - protect content
+    - issue licenses
+
+3. Scenario: Download and Play (content and license flow)
+    a. service provider transfers unprotected content to a content packaging server. server protects the content using playready. (playready server SDK)
+    b. service provider copies the content to a server for distribution over the Web.
+    c. service provider transfers content protection information to a license server.
+    d. client downloads the protected content from the Web server (any protocol)
+    e. player reads from the header that the content is protected. player must acquire a license for the content before it can play back the content. client acquires a license from a license server built using the playready server SDK. 
+    f. Once the client has received a license and the protected content, it can play back the file. 
+    *. If the license contains a policy allowing the client to transfer the content to a portable device, the client can transfer the content by using ILA
+
+4. Scenario: Subscription Content
+    a. service provider transfers unprotected content to the content packaging server.
+        service provider configures the content for metering and transfers the license to the license server. 
+    b. service provider transfers protected content to a Web server for distribution. If the subscription service uses metering, the client must acquire a metering certificate before playing back content.
+    c. When the client is ready, it can acquire subscription content and a license that expires when the subscription ends.
+    d. If the license permits it, the user can transfer content to portable devices. Portable devices track usage and send play count information back to the client.
+    e. The client reports metering data to the metering aggregation server for royalty payments.
+
+5. Encryption basics
+    - Symmetric key cryptography
+    - Public key cryptography
+        : public key to encrypt
+        : private key to decrypt
+        : computationally complex algorithms.
+    - Elliptic curve cryptography (ECC): kind of a public key cryptography algorithm. 
+    - Rivest Shamir Adleman algorithm (RSA algorithm): kond of a public key cryptography algorithm. uses large prime numbers.
+    - Hashed Message Authentication Codes (HMACs)
+        : ensure that data has not been tampered 
+        : validate data integrity. 
+        : Before content is transferred over the network, hashed value using a cryptographic function and a secret key is transferred with the data
+    - Certificates
+        : used to ensure authenticity for entities that are not trusted. 
+        : sender of a certificate encrypts its name (device identifier) using its private key. 
+        : recipient of the certificate then decrypts the certificate with the sender's public key to ensure the sender's identity. 
+        : Because the sender is the only owner of the private key, it is difficult to create a private key given a public key, and the certificate will not decrypt correctly unless encrypted with the private key.
+
+6. PlayReady encryption details
+    - Symmetric algorithms: 
+        : The Advanced Encryption Standard (AES) algorithms
+    - ECC algorithms
+        : AES/ECC for content encryption
+        : ECC ElGamal algorithm for encrypted content keys. 
+        : The elliptic curve digital signature algorithm (ECDSA) for signing messages
+        : standard NIST algorithms (using the P-256 elliptic curve) for ECC encryption
+    - Signing algorithms
+        : For license signing and content header signing, 
+        : HMAC that is hashed using a 256-bit secure hashing algorithm (SHA) with 128-bit keys.
+    - Encrypted containers and runtime/performance considerations
+        : use symmetric key cryptography to encrypt the content. (CEK)
+        : Public key cryptography is then used within the license. (encrypt the CEK)
+
+7. PlayReady header objects
+    - XML fragment
+    - inserted in the protected content header. 
+    - the server information for license acquisition (LA)
+    - the key identifier (KID)
+    - the minimum required security information.
+    - the content ID (CID)
+    - owner ID
+    - other operator-specific data.
+
+8. playready media file mime type
+    - audio/vnd.ms-playready.media.pya 
+    - video/vnd.ms-playready.media.pyv
+
+9. PlayReady Domains
+    - manage content access for multiple clients through a single entity
+    - PlayReady adds the ability for clients to have extensible client identities. This extended identity is stored on a certificate on the client and is associated with an entity (a domain)
+    - With PlayReady PC SDK, it is possible to store the license for a DRM-protected content file in the PlayReady object of the content file itself
+
+10. DLA
+    a. content provider uses a license key seed and keyID to generate a key.
+    b. content provider places the keyID and the URL of the license server in the content header and then encrypt the content with the key (CEK).
+    c. content provider delivers the content to the user.
+    d. client's media player queries the DRM component of the client to determine whether the protected content can be played.
+    e. DRM component searches the license store on the client for a valid license to play the content.
+    f. If the DRM component fails to find the necessary license, it requests a license from the license server. The license challenge used to request the license contains the content header and information about the client (device certificate).
+    g. The license server uses the shared license key seed and the keyID to generate the same content key(CEK) that was generated by the content provider in step a. The license server then encrypts the key. (related with 15. device certificate)
+    h. The license server creates a license, adds the encrypted CEK to the license, and signs the license by using the private signing key.
+    i. The license server delivers the signed license to the client.
+    j. The DRM component on the client verifies the signature and expiration date of the certificate, and places the license in the license store.
+    k. The DRM component decrypts packets of the requested content and sends them to the player.
+    *. At this point, the player will have the content in a usable form. Any policy enabled by the license can be used. For example, if the license enables "play," the DLA client can play the content.
+
+11. Individualization 
+    - process of updating the PlayReady runtime on the client
+    - allowing licenses to be bound to the client
+    - Individualization must be performed on the client before most DRM-related operations will be allowed.
+    - when the client is individualized, the PlayReady runtime is tied to the computer and will not be able to decode licenses on or from any other client (outside of its domain). 
+
+12. Revocation 
+    - process identifying clients that have compromised security
+    - prevents them from getting access to additional licenses for decrypting content
+    - When Microsoft identifies a client with compromised security, the device may be revoked and added to a revocation list. 
+    - The revocation list is periodically downloaded by the license servers 
+    - License servers use this revocation list to deny licenses to clients that have been revoked, thereby preventing the device from playing new protected content.
+
+13. anti-rollback clock
+    - Every time the PlayReady system is invoked, it will note the time. 
+    - When the system clock is detected to be set to an earlier time than the last time noted, it triggers a rollback event. 
+    - The rollback event informs licenses that the event has occurred. 
+
+14. secure clock 
+    - hardware clock that can only be set by specific routines. 
+    - user cannot set a secure clock. 
+    - secure clock reports when it becomes unset. 
+
+15. Obtaining Certificates
+    - Each company must have a company certificate and model certificates
+    - company certificate
+        : use a tool to create a request file that you send to Microsoft. 
+        : Microsoft responds by returning three files that include the company certificates. 
+        : These files must be used when creating device model certificates.
+    - model certificate
+        : create an unsigned template file that defines the capabilities of the device. 
+        : The unsigned template and the files received when you requested the company certificate are then used to generate the device model certificate.
+    - device certificate
+        : digitally signed binary or XML document 
+        : generated by the device at run time and persistently stored on each device
+        : checked by license servers before issuing licenses, by digital media players before transferring licenses, and by the device itself during initialization.
+        : contains DRM information only (does not include other information about the capabilities of the device)
+        : runtime device certificate generate flow
+            : The device generates public and private key pairs for PlayReady device certificates
+            : The device retrieves the unique ID by calling Oem_Device_GetUniqueId()
+            : A device certificate data is created and signed with the model private key. contains a unique ID and the previously generated device certificate¡¯s public keys. (related to 10.g)
+            : The device writes the device certificate¡¯s private keys to storage by calling Oem_Device_SetKey()
+            : The device writes the certificate to storage by calling Oem_Device_SetCert()
+
+16. playing playready protected contents (call sequence)
+    - Drm_Platform_Initialize: ensures that global DRM system state is initialized.
+    - Drm_Initialize: initializes the DRM session by initializing the DRM_APP_CONTEXT structure. 
+    - Drm_Reader_Bind: searches the license store for a valid license and if found, binds to it. 
+    - Drm_Reader_Commit: commits changes, such as an incremented playcount, to the data store. 
+    - Drm_Reader_Decrypt: decrypts the content for playback and places it in the buffer specified in the call.
+    - Drm_Reader_Close: releases the resources allocated by the call to Drm_Reader_Bind. 
+    - Drm_Uninitialize: uninitializes the DRM_APP_CONTEXT structure for this session and releases allocated resources. 
+    - Drm_Platform_Uninitialize: ensures that global DRM system state is uninitialized.
+
+/* The protected content is contained in pbData (cbData is the 
+ * length of the buffer)
+ */
+DRM_RESULT dr                       = DRM_SUCCESS;
+const DRM_CONST_STRING *proparray[] = {&g_dstrWMDRM_RIGHT_PLAYBACK };
+DRM_DWORD cRights = 1;
+const DRM_CONST_STRING *apdcsRights [cRights];
+DRM_DECRYPT_CONTEXT  oDecryptContext;
+DRM_BYTE *pbRevocationBuffer = NULL;
+const DRM_WCHAR rgwchStoreName [] = {ONE_WCHAR('c','\0'), ONE_WCHAR(':','\0'),ONE_WCHAR('\\', 
+'\0'), ONE_WCHAR('t','\0'), ONE_WCHAR('e','\0'), ONE_WCHAR('m','\0'), 
+ONE_WCHAR('p', '\0'), ONE_WCHAR('\\', '\0'), ONE_WCHAR('s', '\0'), 
+ONE_WCHAR('a', '\0'), ONE_WCHAR('m', '\0'), ONE_WCHAR('p','\0'), ONE_WCHAR('l', 
+'\0'), ONE_WCHAR('e', '\0'), ONE_WCHAR('.', '\0'), ONE_WCHAR('h', '\0'), 
+ONE_WCHAR('d', '\0'), ONE_WCHAR('s', '\0')};
+const DRM_CONST_STRING dstrStoreName = CREATE_DRM_STRING(rgwchStoreName);
+poAppContext = (DRM_APP_CONTEXT *) Oem_MemAlloc( SIZEOF(DRM_APP_CONTEXT) );
+if (poAppContext != NULL){
+    dr = Drm_Initialize(poAppContext, NULL, &dstrStoreName);
+    if (dr == DRM_SUCCESS){
+        /* if we're supporting revocation, set the revocation buffer */
+        pbRevocationBuffer =(DRM_BYTE*)Oem_MemAlloc(REVOCATION_BUFFER_SIZE);
+        if (pbRevocationBuffer != NULL){
+            if (dr == DRM_SUCCESS){
+                apdcsRights [0] = (DRM_CONST_STRING *) &g_dstrWMDRM_RIGHT_PLAYBACK;
+                dr = Drm_Reader_Bind (poAppContext, 
+                                       apdcsRights, 
+                                       cRights,
+               (DRMPFNOUTPUTLEVELSCALLBACK)BindCallback,
+                                       NULL,
+                                      &oDecryptContext );
+                if (dr == DRM_SUCCESS){
+                    dr = Drm_Reader_Commit( poAppContext );
+                    if (dr == DRM_SUCCESS){
+                        dr = Drm_Reader_Decrypt(poAppContext, pbData, cbData);
+                        if (dr == DRM_SUCCESS){
+                          /*cbData bytes of decrypted data exists in pbData*/
+                        }
+                    }
+                  Drm_Reader_Close(&oDecryptContext );
+                }
+            }
+        }
+        Drm_Uninitialize (poAppContext);
+    }
+    Oem_MemFree (poAppContext);
+}
+
+
+
+
+
+
+
+
+
+
+ 
