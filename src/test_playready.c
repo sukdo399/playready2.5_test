@@ -27,8 +27,11 @@ ErrorExit:
   Drm_Platform_Uninitialize();
 
   if (DRM_FAILED(dr)) {
+    const DRM_CHAR* description;
+    DRM_ERR_GetErrorNameFromCode(dr, &description);
     printf("==============================================\n");
     printf("============ Failed  ==> 0x%08X ==========\n", dr);
+    printf("%s \n", description);
     printf("==============================================\n");
   } else {
     printf("==============================================\n");
